@@ -11,6 +11,10 @@ type NavItem = {
 
 type TabKey = "explore" | "trips" | "owner" | "account";
 
+type TopNavProps = {
+  showSignOut?: boolean;
+};
+
 const navItems: NavItem[] = [
   { href: "/", label: "Explore" },
   { href: "/trips", label: "Trips" },
@@ -32,52 +36,66 @@ function getPrimaryAccountLink(role: "renter" | "owner" | "admin") {
   return { href: "/trips", label: "Trips" };
 }
 
-export async function TopNav() {
+export async function TopNav({ showSignOut = true }: TopNavProps = {}) {
   const user = await getCurrentUser();
   const primaryAccountLink = user ? getPrimaryAccountLink(user.role) : null;
 
   return (
-    <header className="sticky top-0 z-40 border-b border-black/5 bg-[#f7f7f5]/90 pt-[env(safe-area-inset-top)] backdrop-blur-2xl md:border-black/10 md:bg-white/95 md:pt-0">
-      <nav className="mx-auto flex h-14 w-full max-w-7xl items-center justify-between px-4 sm:px-6 md:h-16 lg:px-8">
-        <Link href="/" className="flex items-center gap-2 text-lg font-bold tracking-normal md:text-xl">
-          <Image src="/icon.svg" alt="" width={32} height={32} priority className="h-8 w-8" aria-hidden="true" />
+    <header className="hidden bg-white/90 backdrop-blur-xl md:sticky md:top-0 md:z-40 md:block">
+      <nav className="flex min-h-[4.75rem] w-full items-center justify-between gap-4 px-4 sm:px-6 lg:px-10 xl:px-12">
+        <Link
+          href="/"
+          className="flex shrink-0 items-center gap-3 rounded-full py-2 pr-3 text-lg font-bold tracking-normal transition hover:bg-[#f3f3f3] md:text-xl"
+        >
+          <Image src="/icon.svg" alt="" width={36} height={36} priority className="h-9 w-9" aria-hidden="true" />
           Carlink
         </Link>
-        <div className="hidden items-center gap-1 md:flex">
-          {navItems.map((item) => (
-            <Link
-              key={item.href}
-              href={item.href}
-              className="rounded-full px-4 py-2 text-sm font-medium text-black transition hover:bg-[#efefef]"
-            >
-              {item.label}
-            </Link>
-          ))}
+        <div className="hidden flex-1 justify-center md:flex">
+          <div className="flex items-center gap-1 rounded-full bg-[#f3f3f3] p-1">
+            {navItems.map((item) => (
+              <Link
+                key={item.href}
+                href={item.href}
+                className="rounded-full px-5 py-2.5 text-sm font-semibold text-black transition hover:bg-white"
+              >
+                {item.label}
+              </Link>
+            ))}
+          </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex shrink-0 items-center gap-2">
           <Link
             href="/owner"
-            className="inline-flex min-h-10 items-center rounded-full bg-[#efefef] px-3 text-xs font-semibold text-black transition hover:bg-[#e2e2e2] md:px-4 md:text-sm"
+            className="inline-flex min-h-11 items-center rounded-full bg-[#efefef] px-4 text-sm font-semibold text-black transition hover:bg-[#e2e2e2]"
           >
             Rent your car
           </Link>
           {user && primaryAccountLink ? (
             <details className="group relative">
-              <summary className="flex min-h-11 cursor-pointer list-none items-center gap-3 rounded-full bg-black px-4 text-sm font-medium text-white transition hover:bg-[#282828] [&::-webkit-details-marker]:hidden">
-                <span className="flex h-7 w-7 items-center justify-center rounded-full bg-white text-xs font-bold text-black">
+              <summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 rounded-full bg-black py-1.5 pl-2 pr-3 text-sm font-semibold text-white transition hover:bg-[#282828] [&::-webkit-details-marker]:hidden">
+                <span className="flex h-8 w-8 items-center justify-center rounded-full bg-white text-xs font-bold text-black">
                   {user.fullName.trim().charAt(0).toUpperCase() || "A"}
                 </span>
-                <span className="hidden md:inline">{getFirstName(user.fullName)}</span>
-                <span className="text-xs transition group-open:rotate-180" aria-hidden="true">
-                  v
-                </span>
+                <span className="hidden max-w-28 truncate md:inline">{getFirstName(user.fullName)}</span>
+                <svg
+                  className="h-4 w-4 transition group-open:rotate-180"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth="2"
+                  viewBox="0 0 24 24"
+                  aria-hidden="true"
+                >
+                  <path d="m6 9 6 6 6-6" />
+                </svg>
               </summary>
-              <div className="fixed left-3 right-3 top-[calc(4.25rem+env(safe-area-inset-top))] z-50 overflow-hidden rounded-2xl bg-white p-2 shadow-[0_18px_60px_rgba(0,0,0,0.18)] ring-1 ring-black/10 md:absolute md:left-auto md:right-0 md:top-auto md:mt-2 md:w-64">
+              <div className="fixed left-3 right-3 top-[calc(4.25rem+env(safe-area-inset-top))] z-50 overflow-hidden rounded-2xl bg-white p-2 ring-1 ring-black/10 md:absolute md:left-auto md:right-0 md:top-auto md:mt-2 md:w-64">
                 <div className="px-3 py-3">
                   <div className="truncate text-sm font-bold">{user.fullName}</div>
                   <div className="mt-1 truncate text-xs text-[#5e5e5e]">{user.email}</div>
                 </div>
-                <div className="border-t border-black/10 py-2">
+                <div className="space-y-1 py-1">
                   <Link
                     href="/settings"
                     className="block rounded-xl px-3 py-2.5 text-sm font-medium text-black transition hover:bg-[#efefef]"
@@ -91,27 +109,29 @@ export async function TopNav() {
                     {primaryAccountLink.label}
                   </Link>
                 </div>
-                <form action={signOutAction} className="border-t border-black/10 pt-2">
-                  <button
-                    type="submit"
-                    className="block w-full rounded-xl px-3 py-2.5 text-left text-sm font-medium text-black transition hover:bg-[#efefef]"
-                  >
-                    Sign out
-                  </button>
-                </form>
+                {showSignOut ? (
+                  <form action={signOutAction} className="pt-1">
+                    <button
+                      type="submit"
+                      className="block w-full rounded-xl px-3 py-2.5 text-left text-sm font-medium text-black transition hover:bg-[#efefef]"
+                    >
+                      Sign out
+                    </button>
+                  </form>
+                ) : null}
               </div>
             </details>
           ) : (
             <>
               <Link
                 href={signInPath("/settings")}
-                className="hidden rounded-full px-4 py-2 text-sm font-medium text-black transition hover:bg-[#efefef] md:inline-flex"
+                className="hidden min-h-11 items-center rounded-full px-4 text-sm font-semibold text-black transition hover:bg-[#efefef] md:inline-flex"
               >
                 Log in
               </Link>
               <Link
                 href={signInPath("/settings")}
-                className="rounded-full bg-black px-4 py-2 text-sm font-medium text-white transition hover:bg-[#282828]"
+                className="inline-flex min-h-11 items-center rounded-full bg-black px-4 text-sm font-semibold text-white transition hover:bg-[#282828]"
               >
                 <span className="md:hidden">Sign in</span>
                 <span className="hidden md:inline">Get started</span>
@@ -124,9 +144,78 @@ export async function TopNav() {
   );
 }
 
+export async function MobileAppHeader({
+  title,
+  subtitle,
+  backHref,
+}: {
+  title: string;
+  subtitle?: string;
+  backHref?: string;
+}) {
+  const user = await getCurrentUser();
+  const accountHref = user ? "/settings" : signInPath("/settings");
+
+  return (
+    <header className="w-full max-w-full overflow-hidden bg-white px-4 pb-3 pt-[calc(0.75rem+env(safe-area-inset-top))] md:hidden">
+      <div className="flex min-h-11 w-full min-w-0 items-center justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-3">
+          {backHref ? (
+            <Link
+              href={backHref}
+              aria-label="Back"
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#f2f2f2] text-black"
+            >
+              <svg
+                className="h-5 w-5"
+                fill="none"
+                stroke="currentColor"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth="2.2"
+                viewBox="0 0 24 24"
+                aria-hidden="true"
+              >
+                <path d="m15 18-6-6 6-6" />
+              </svg>
+            </Link>
+          ) : null}
+          <div className="min-w-0">
+            <h1 className="truncate text-[28px] font-bold leading-8 tracking-normal">{title}</h1>
+            {subtitle ? <p className="mt-0.5 truncate text-sm text-[#5e5e5e]">{subtitle}</p> : null}
+          </div>
+        </div>
+        <Link
+          href={accountHref}
+          aria-label={user ? "Open account" : "Sign in"}
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#f2f2f2] text-sm font-bold text-black"
+        >
+          {user ? (
+            user.fullName.trim().charAt(0).toUpperCase() || "A"
+          ) : (
+            <svg
+              className="h-5 w-5"
+              fill="none"
+              stroke="currentColor"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth="2"
+              viewBox="0 0 24 24"
+              aria-hidden="true"
+            >
+              <circle cx="12" cy="8" r="3.5" />
+              <path d="M4.5 20a7.5 7.5 0 0 1 15 0" />
+            </svg>
+          )}
+        </Link>
+      </div>
+    </header>
+  );
+}
+
 function MobileNavIcon({ tab }: { tab: TabKey }) {
   const baseProps = {
-    className: "h-5 w-5",
+    className: "h-6 w-6",
     fill: "none",
     stroke: "currentColor",
     strokeLinecap: "round" as const,
@@ -179,7 +268,7 @@ function MobileNavIcon({ tab }: { tab: TabKey }) {
 export async function MobileTabBar({ active = "explore" }: { active?: TabKey }) {
   const user = await getCurrentUser();
   const baseItems: Array<NavItem & { key: TabKey }> = [
-    { key: "explore", href: "/", label: "Explore" },
+    { key: "explore", href: "/", label: "Cars" },
     { key: "trips", href: "/trips", label: "Trips" },
   ];
   const accountItem: NavItem & { key: TabKey } = {
@@ -197,8 +286,8 @@ export async function MobileTabBar({ active = "explore" }: { active?: TabKey }) 
   const gridClass = mobileNavItems.length === 3 ? "grid-cols-3" : "grid-cols-4";
 
   return (
-    <nav className="fixed inset-x-3 bottom-[calc(0.75rem+env(safe-area-inset-bottom))] z-50 mx-auto max-w-md rounded-[2rem] border border-white/70 bg-white/85 p-2 shadow-[0_24px_80px_rgba(0,0,0,0.22)] backdrop-blur-2xl md:hidden">
-      <div className={`grid ${gridClass} gap-1 text-center text-[11px] font-semibold text-[#6b6b6b]`}>
+    <nav className="ios-tabbar z-50 rounded-[2rem] border border-black/10 bg-white/90 px-2 py-1.5 backdrop-blur-xl md:hidden">
+      <div className={`grid h-14 ${gridClass} text-center text-[11px] font-medium text-[#8e8e93]`}>
         {mobileNavItems.map((item) => {
           const isActive = active === item.key;
 
@@ -207,12 +296,12 @@ export async function MobileTabBar({ active = "explore" }: { active?: TabKey }) 
               key={item.href}
               href={item.href}
               aria-current={isActive ? "page" : undefined}
-              className={`flex min-h-[58px] flex-col items-center justify-center gap-1 rounded-[1.45rem] px-2 transition ${
-                isActive ? "bg-black text-white shadow-[0_10px_30px_rgba(0,0,0,0.22)]" : "text-[#626262] hover:bg-black/5"
+              className={`flex h-14 flex-col items-center justify-center gap-0.5 px-2 transition-colors ${
+                isActive ? "font-semibold text-black" : "text-[#8e8e93] active:text-black"
               }`}
             >
               <MobileNavIcon tab={item.key} />
-              {item.label}
+              <span>{item.label}</span>
             </Link>
           );
         })}

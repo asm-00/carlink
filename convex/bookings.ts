@@ -1,6 +1,9 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
+import type { Doc, Id } from "./_generated/dataModel";
+import type { MutationCtx } from "./_generated/server";
 import { requireOwner, requireUser } from "./lib/session";
+import { adjustPublicStats } from "./lib/platformStats";
 
 function daysBetween(startDate: string, endDate: string) {
   const start = Date.parse(startDate);
@@ -11,6 +14,69 @@ function daysBetween(startDate: string, endDate: string) {
   }
 
   return Math.max(1, Math.ceil((end - start) / (1000 * 60 * 60 * 24)));
+}
+
+async function recordCompletedTrip(ctx: MutationCtx, booking: Doc<"bookings">, now: number) {
+  const vehicle = await ctx.db.get(booking.vehicleId);
+
+  if (vehicle) {
+    await ctx.db.patch(vehicle._id, {
+      trips: vehicle.trips + 1,
+      updatedAt: now,
+    });
+  }
+
+  await adjustPublicStats(ctx, { completedTrips: 1 });
+}
+
+const availabilityBlockingStatuses = new Set<Doc<"bookings">["status"]>(["approved", "paid", "active"]);
+
+function datesOverlap(
+  firstStartDate: string,
+  firstEndDate: string,
+  secondStartDate: string,
+  secondEndDate: string,
+) {
+  const firstStart = Date.parse(firstStartDate);
+  const firstEnd = Date.parse(firstEndDate);
+  const secondStart = Date.parse(secondStartDate);
+  const secondEnd = Date.parse(secondEndDate);
+
+  if (
+    !Number.isFinite(firstStart) ||
+    !Number.isFinite(firstEnd) ||
+    !Number.isFinite(secondStart) ||
+    !Number.isFinite(secondEnd)
+  ) {
+    return false;
+  }
+
+  return firstStart < secondEnd && secondStart < firstEnd;
+}
+
+async function assertVehicleAvailable(
+  ctx: MutationCtx,
+  vehicleId: Id<"vehicles">,
+  startDate: string,
+  endDate: string,
+  ignoreBookingId?: Id<"bookings">,
+) {
+  const bookings = await ctx.db
+    .query("bookings")
+    .withIndex("by_vehicleId", (q) => q.eq("vehicleId", vehicleId))
+    .order("desc")
+    .take(100);
+
+  const hasConflict = bookings.some(
+    (booking) =>
+      booking._id !== ignoreBookingId &&
+      availabilityBlockingStatuses.has(booking.status) &&
+      datesOverlap(startDate, endDate, booking.startDate, booking.endDate),
+  );
+
+  if (hasConflict) {
+    throw new Error("Vehicle is already booked for those dates");
+  }
 }
 
 export const requestBooking = mutation({
@@ -28,7 +94,13 @@ export const requestBooking = mutation({
       throw new Error("Vehicle is not available");
     }
 
+    if (vehicle.ownerId === renter._id) {
+      throw new Error("Owners cannot book their own listing");
+    }
+
     const totalDays = daysBetween(args.startDate, args.endDate);
+    await assertVehicleAvailable(ctx, vehicle._id, args.startDate, args.endDate);
+
     const subtotal = totalDays * vehicle.dailyRate;
     const platformFee = Math.round(subtotal * 0.12);
     const now = Date.now();
@@ -36,7 +108,6 @@ export const requestBooking = mutation({
     return await ctx.db.insert("bookings", {
       vehicleId: vehicle._id,
       renterId: renter._id,
-      ownerId: vehicle.ownerId,
       startDate: args.startDate,
       endDate: args.endDate,
       totalDays,
@@ -48,6 +119,7 @@ export const requestBooking = mutation({
       status: "requested",
       createdAt: now,
       updatedAt: now,
+      ...(vehicle.ownerId ? { ownerId: vehicle.ownerId } : {}),
     });
   },
 });
@@ -66,10 +138,25 @@ export const myBookings = query({
 
     return await Promise.all(
       bookings.map(async (booking) => {
-        const vehicle = await ctx.db.get(booking.vehicleId);
+        const [vehicle, rating] = await Promise.all([
+          ctx.db.get(booking.vehicleId),
+          ctx.db
+            .query("ratings")
+            .withIndex("by_bookingId", (q) => q.eq("bookingId", booking._id))
+            .unique(),
+        ]);
+
         return {
           ...booking,
           vehicle,
+          rating: rating
+            ? {
+                _id: rating._id,
+                rating: rating.rating,
+                note: rating.note ?? "",
+                updatedAt: rating.updatedAt,
+              }
+            : null,
         };
       }),
     );
@@ -136,6 +223,32 @@ export const renterPay = mutation({
   },
 });
 
+export const renterCancel = mutation({
+  args: {
+    sessionToken: v.string(),
+    bookingId: v.id("bookings"),
+  },
+  handler: async (ctx, args) => {
+    const renter = await requireUser(ctx, args.sessionToken);
+    const booking = await ctx.db.get(args.bookingId);
+
+    if (!booking || booking.renterId !== renter._id) {
+      throw new Error("Booking not found");
+    }
+
+    if (booking.status !== "requested" && booking.status !== "approved") {
+      throw new Error("This trip can no longer be cancelled here");
+    }
+
+    await ctx.db.patch(booking._id, {
+      status: "cancelled",
+      updatedAt: Date.now(),
+    });
+
+    return booking._id;
+  },
+});
+
 export const ownerUpdateStatus = mutation({
   args: {
     sessionToken: v.string(),
@@ -165,10 +278,20 @@ export const ownerUpdateStatus = mutation({
       throw new Error("Invalid booking transition");
     }
 
+    if (args.status === "approved") {
+      await assertVehicleAvailable(ctx, booking.vehicleId, booking.startDate, booking.endDate, booking._id);
+    }
+
+    const now = Date.now();
+
     await ctx.db.patch(booking._id, {
       status: args.status,
-      updatedAt: Date.now(),
+      updatedAt: now,
     });
+
+    if (args.status === "completed") {
+      await recordCompletedTrip(ctx, booking, now);
+    }
 
     return booking._id;
   },

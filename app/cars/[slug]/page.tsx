@@ -1,16 +1,24 @@
 import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { requestBookingAction } from "@/app/actions/bookings";
-import { Footer, MobileTabBar, TopNav } from "@/app/components/navigation";
+import { Footer, MobileAppHeader, MobileTabBar, TopNav } from "@/app/components/navigation";
+import { RatingForm } from "@/app/components/rating-form";
 import { api, getConvexClient } from "@/app/lib/convex-server";
-import { getCurrentUser } from "@/app/lib/session";
+import { getCurrentUser, getSessionToken } from "@/app/lib/session";
+import { getDefaultTripDates } from "@/app/lib/trip-defaults";
+import { BookingRequestPanel } from "./booking-request-panel";
 
 export const dynamic = "force-dynamic";
 
 type CarPageProps = {
   params: Promise<{ slug: string }>;
-  searchParams: Promise<{ startDate?: string; endDate?: string; bookingError?: string }>;
+  searchParams: Promise<{
+    bookingError?: string;
+    endDate?: string;
+    rated?: string;
+    ratingError?: string;
+    startDate?: string;
+  }>;
 };
 
 export async function generateMetadata({ params }: CarPageProps) {
@@ -31,44 +39,37 @@ export async function generateMetadata({ params }: CarPageProps) {
 
 export default async function CarDetailPage({ params, searchParams }: CarPageProps) {
   const { slug } = await params;
-  const { startDate, endDate, bookingError } = await searchParams;
-  const selectedStartDate = startDate ?? "2026-06-02";
-  const selectedEndDate = endDate ?? "2026-06-06";
-  const [vehicle, user] = await Promise.all([
-    getConvexClient().query(api.vehicles.getBySlug, { slug }),
+  const { startDate, endDate, bookingError, rated, ratingError } = await searchParams;
+  const sessionToken = await getSessionToken();
+  const convex = getConvexClient();
+  const [vehicle, user, settings] = await Promise.all([
+    convex.query(api.vehicles.getBySlug, { slug, sessionToken }),
     getCurrentUser(),
+    convex.query(api.settings.preferences, { sessionToken }),
   ]);
 
   if (!vehicle) {
     notFound();
   }
 
-  const startTime = Date.parse(selectedStartDate);
-  const endTime = Date.parse(selectedEndDate);
-  const days =
-    Number.isFinite(startTime) && Number.isFinite(endTime) && endTime > startTime
-      ? Math.max(1, Math.ceil((endTime - startTime) / (1000 * 60 * 60 * 24)))
-      : 1;
-  const subtotal = vehicle.dailyRate * days;
-  const platformFee = Math.round(subtotal * 0.12);
-  const total = subtotal + platformFee;
-  const signInNextParams = new URLSearchParams();
-
-  if (selectedStartDate) {
-    signInNextParams.set("startDate", selectedStartDate);
-  }
-  if (selectedEndDate) {
-    signInNextParams.set("endDate", selectedEndDate);
-  }
-
-  const signInNextPath = `/cars/${vehicle.slug}${signInNextParams.size ? `?${signInNextParams.toString()}` : ""}`;
+  const defaultDates = getDefaultTripDates(settings.defaultTripDays);
+  const selectedStartDate = startDate ?? defaultDates.startDate;
+  const selectedEndDate = endDate ?? defaultDates.endDate;
+  const ratingCountLabel =
+    vehicle.ratingSummary.count > 0
+      ? `${vehicle.ratingSummary.count} ${vehicle.ratingSummary.count === 1 ? "rating" : "ratings"}`
+      : `${vehicle.trips} trips`;
+  const currentDetailPath = `/cars/${vehicle.slug}?startDate=${encodeURIComponent(
+    selectedStartDate,
+  )}&endDate=${encodeURIComponent(selectedEndDate)}`;
 
   return (
-    <div className="min-h-screen bg-[#f7f7f5] text-black md:bg-white">
+    <div className="min-h-screen bg-white text-black">
       <TopNav />
-      <main className="pb-[calc(7.5rem+env(safe-area-inset-bottom))] md:pb-0">
-        <section className="mx-auto w-full max-w-7xl px-4 py-5 sm:px-6 md:py-6 lg:px-8">
-          <Link href="/" className="inline-flex rounded-full bg-[#efefef] px-4 py-2 text-sm font-medium">
+      <MobileAppHeader title="Car details" subtitle={`${vehicle.location} - N$${vehicle.dailyRate}/day`} backHref="/" />
+      <main className="pb-[calc(5rem+env(safe-area-inset-bottom))] md:pb-0">
+        <section className="mx-auto w-full max-w-7xl px-4 py-2 sm:px-6 md:py-6 lg:px-8">
+          <Link href="/" className="hidden rounded-full bg-[#efefef] px-4 py-2 text-sm font-medium md:inline-flex">
             Back to explore
           </Link>
           <div className="mt-5 grid gap-6 lg:grid-cols-[1.15fr_0.85fr]">
@@ -93,82 +94,24 @@ export default async function CarDetailPage({ params, searchParams }: CarPagePro
                   </h1>
                 </div>
                 <div className="rounded-2xl bg-[#efefef] p-4">
-                  <div className="text-sm text-[#5e5e5e]">Owner rating</div>
-                  <div className="mt-1 text-2xl font-bold">{vehicle.rating}</div>
-                  <div className="text-sm text-[#5e5e5e]">{vehicle.trips} trips</div>
+                  <div className="text-sm text-[#5e5e5e]">Trip rating</div>
+                  <div className="mt-1 text-2xl font-bold">{vehicle.ratingSummary.label}</div>
+                  <div className="text-sm text-[#5e5e5e]">{ratingCountLabel}</div>
                 </div>
               </div>
             </div>
 
             <aside className="lg:sticky lg:top-24 lg:self-start">
-              <div className="rounded-[1.75rem] bg-white p-4 shadow-[0_16px_45px_rgba(0,0,0,0.08)] ring-1 ring-black/5 md:rounded-2xl md:p-5 md:shadow-[0_4px_16px_rgba(0,0,0,0.16)] md:ring-0">
-                <div className="flex items-end justify-between">
-                  <div>
-                    <div className="text-sm text-[#5e5e5e]">Daily rate</div>
-                    <div className="text-3xl font-bold">N${vehicle.dailyRate}</div>
-                  </div>
-                  <div className="rounded-full bg-[#efefef] px-3 py-2 text-sm font-medium">{vehicle.transmission}</div>
-                </div>
-                <form action={requestBookingAction} className="mt-5">
-                  {bookingError ? (
-                    <div className="mb-4 rounded-2xl bg-[#efefef] p-4 text-sm font-medium">
-                      Choose a valid start and return date.
-                    </div>
-                  ) : null}
-                  <input type="hidden" name="vehicleId" value={vehicle._id} />
-                  <input type="hidden" name="slug" value={vehicle.slug} />
-                  <div className="grid grid-cols-2 gap-3">
-                    <label className="rounded-lg bg-[#efefef] p-4">
-                      <span className="text-xs font-medium text-[#5e5e5e]">Start</span>
-                      <input
-                        name="startDate"
-                        type="date"
-                        defaultValue={selectedStartDate}
-                        required
-                        className="mt-1 w-full bg-transparent text-sm font-medium outline-none"
-                        aria-label="Start date"
-                      />
-                    </label>
-                    <label className="rounded-lg bg-[#efefef] p-4">
-                      <span className="text-xs font-medium text-[#5e5e5e]">Return</span>
-                      <input
-                        name="endDate"
-                        type="date"
-                        defaultValue={selectedEndDate}
-                        required
-                        className="mt-1 w-full bg-transparent text-sm font-medium outline-none"
-                        aria-label="Return date"
-                      />
-                    </label>
-                  </div>
-                  <div className="mt-5 divide-y divide-black/10 text-sm">
-                    <div className="flex justify-between py-3">
-                      <span>N${vehicle.dailyRate} x {days} days</span>
-                      <span>N${subtotal}</span>
-                    </div>
-                    <div className="flex justify-between py-3">
-                      <span>Platform fee</span>
-                      <span>N${platformFee}</span>
-                    </div>
-                    <div className="flex justify-between py-3 text-base font-bold">
-                      <span>Estimated total</span>
-                      <span>N${total}</span>
-                    </div>
-                  </div>
-                  {user ? (
-                    <button type="submit" className="mt-5 min-h-12 w-full rounded-full bg-black px-5 text-base font-medium text-white transition hover:bg-[#282828]">
-                      Request booking
-                    </button>
-                  ) : (
-                    <Link
-                      href={`/sign-in?next=${encodeURIComponent(signInNextPath)}`}
-                      className="mt-5 flex min-h-12 w-full items-center justify-center rounded-full bg-black px-5 text-base font-medium text-white transition hover:bg-[#282828]"
-                    >
-                      Sign in to request booking
-                    </Link>
-                  )}
-                </form>
-              </div>
+              <BookingRequestPanel
+                bookingError={bookingError}
+                dailyRate={vehicle.dailyRate}
+                initialEndDate={selectedEndDate}
+                initialStartDate={selectedStartDate}
+                isSignedIn={Boolean(user)}
+                slug={vehicle.slug}
+                transmission={vehicle.transmission}
+                vehicleId={vehicle._id}
+              />
             </aside>
           </div>
         </section>
@@ -203,24 +146,56 @@ export default async function CarDetailPage({ params, searchParams }: CarPagePro
             </div>
           </div>
 
-          <div className="rounded-2xl bg-black p-6 text-white">
-            <p className="text-sm font-medium text-[#afafaf]">Owner</p>
-            <h2 className="mt-2 text-2xl font-bold">{vehicle.ownerName}</h2>
-            <p className="mt-2 text-sm text-[#afafaf]">Verified listing owner</p>
-            <div className="mt-6 divide-y divide-white/15 text-sm">
-              <div className="flex justify-between py-3">
-                <span>Pickup</span>
-                <span>{vehicle.pickup}</span>
-              </div>
-              <div className="flex justify-between py-3">
-                <span>Seats</span>
-                <span>{vehicle.seats}</span>
-              </div>
-              <div className="flex justify-between py-3">
-                <span>Use case</span>
-                <span>{vehicle.range}</span>
+          <div className="grid gap-4">
+            <div className="rounded-2xl bg-black p-6 text-white">
+              <p className="text-sm font-medium text-[#afafaf]">Owner</p>
+              <h2 className="mt-2 text-2xl font-bold">{vehicle.owner.fullName}</h2>
+              <p className="mt-2 text-sm text-[#afafaf]">
+                {vehicle.owner.isVerified ? "Verified listing owner" : "Listing owner"}
+              </p>
+              <div className="mt-6 divide-y divide-white/15 text-sm">
+                <div className="flex justify-between gap-4 py-3">
+                  <span>Pickup</span>
+                  <span className="text-right">{vehicle.pickup}</span>
+                </div>
+                <div className="flex justify-between gap-4 py-3">
+                  <span>Seats</span>
+                  <span>{vehicle.seats}</span>
+                </div>
+                <div className="flex justify-between gap-4 py-3">
+                  <span>Use case</span>
+                  <span className="text-right">{vehicle.range}</span>
+                </div>
+                {vehicle.owner.email ? (
+                  <div className="flex justify-between gap-4 py-3">
+                    <span>Email</span>
+                    <span className="text-right">{vehicle.owner.email}</span>
+                  </div>
+                ) : null}
+                {vehicle.owner.phone ? (
+                  <div className="flex justify-between gap-4 py-3">
+                    <span>Phone</span>
+                    <span>{vehicle.owner.phone}</span>
+                  </div>
+                ) : null}
               </div>
             </div>
+
+            {rated ? (
+              <div className="rounded-2xl bg-[#efefef] p-4 text-sm font-medium">Rating saved.</div>
+            ) : null}
+            {ratingError ? (
+              <div className="rounded-2xl bg-[#efefef] p-4 text-sm font-medium">Could not save that rating.</div>
+            ) : null}
+            {vehicle.viewerRating ? (
+              <RatingForm
+                bookingId={vehicle.viewerRating.bookingId}
+                defaultNote={vehicle.viewerRating.note}
+                defaultRating={vehicle.viewerRating.rating}
+                redirectTo={currentDetailPath}
+                slug={vehicle.slug}
+              />
+            ) : null}
           </div>
         </section>
       </main>

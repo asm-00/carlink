@@ -10,6 +10,8 @@ const ownerStatus = v.union(
 );
 const vehicleStatus = v.union(v.literal("draft"), v.literal("pending"), v.literal("published"), v.literal("paused"));
 const vehicleType = v.union(v.literal("Compact"), v.literal("SUV"), v.literal("4x4"));
+const pickupArea = v.union(v.literal("Any area"), v.literal("Windhoek"), v.literal("Swakopmund"));
+const preferredVehicleType = v.union(v.literal("Any car"), v.literal("Compact"), v.literal("SUV"), v.literal("4x4"));
 const bookingStatus = v.union(
   v.literal("requested"),
   v.literal("approved"),
@@ -31,6 +33,16 @@ export default defineSchema({
     createdAt: v.number(),
     updatedAt: v.number(),
   }).index("by_email", ["email"]).index("by_role", ["role"]),
+
+  userSettings: defineTable({
+    userId: v.id("users"),
+    defaultPickupArea: pickupArea,
+    preferredVehicleType,
+    gravelReadyOnly: v.boolean(),
+    defaultTripDays: v.number(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_userId", ["userId"]),
 
   sessions: defineTable({
     token: v.string(),
@@ -95,6 +107,22 @@ export default defineSchema({
     .index("by_renterId", ["renterId"])
     .index("by_ownerId", ["ownerId"])
     .index("by_status", ["status"]),
+
+  ratings: defineTable({
+    bookingId: v.id("bookings"),
+    vehicleId: v.id("vehicles"),
+    ownerId: v.optional(v.id("users")),
+    renterId: v.id("users"),
+    rating: v.number(),
+    note: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_bookingId", ["bookingId"])
+    .index("by_vehicleId", ["vehicleId"])
+    .index("by_ownerId", ["ownerId"])
+    .index("by_renterId", ["renterId"])
+    .index("by_vehicleId_and_renterId", ["vehicleId", "renterId"]),
 
   ownerApplications: defineTable({
     userId: v.id("users"),

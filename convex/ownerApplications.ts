@@ -1,6 +1,17 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { requireUser } from "./lib/session";
+import { adjustPublicStats } from "./lib/platformStats";
+
+function requireText(value: string, label: string) {
+  const trimmed = value.trim();
+
+  if (!trimmed) {
+    throw new Error(`${label} is required`);
+  }
+
+  return trimmed;
+}
 
 export const mine = query({
   args: {
@@ -26,6 +37,9 @@ export const submit = mutation({
   handler: async (ctx, args) => {
     const user = await requireUser(ctx, args.sessionToken);
     const now = Date.now();
+    const phone = requireText(args.phone, "Phone");
+    const location = requireText(args.location, "Vehicle location");
+    const vehicleSummary = requireText(args.vehicleSummary, "Vehicle summary");
     const existing = await ctx.db
       .query("ownerApplications")
       .withIndex("by_userId", (q) => q.eq("userId", user._id))
@@ -33,10 +47,11 @@ export const submit = mutation({
 
     if (existing) {
       await ctx.db.patch(existing._id, {
-        phone: args.phone.trim(),
-        location: args.location.trim(),
-        vehicleSummary: args.vehicleSummary.trim(),
+        phone,
+        location,
+        vehicleSummary,
         status: "pending",
+        notes: "",
         updatedAt: now,
       });
       await ctx.db.patch(user._id, { ownerStatus: "pending", updatedAt: now });
@@ -47,9 +62,9 @@ export const submit = mutation({
       userId: user._id,
       fullName: user.fullName,
       email: user.email,
-      phone: args.phone.trim(),
-      location: args.location.trim(),
-      vehicleSummary: args.vehicleSummary.trim(),
+      phone,
+      location,
+      vehicleSummary,
       status: "pending",
       createdAt: now,
       updatedAt: now,
@@ -59,6 +74,8 @@ export const submit = mutation({
       ownerStatus: "pending",
       updatedAt: now,
     });
+
+    await adjustPublicStats(ctx, { ownerApplications: 1 });
 
     return applicationId;
   },

@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { signInAction } from "@/app/actions/auth";
-import { MobileTabBar } from "@/app/components/navigation";
+import { MobileAppHeader, MobileTabBar } from "@/app/components/navigation";
 import { DEFAULT_ACCOUNT_PATH, isAdminPath, sanitizeRedirectPath } from "@/app/lib/redirects";
 import { getCurrentUser } from "@/app/lib/session";
 
@@ -34,7 +34,8 @@ export default async function SignInPage({ searchParams }: SignInPageProps) {
         : null;
 
   return (
-    <main className="flex min-h-screen bg-[#f7f7f5] text-black md:bg-white">
+    <main className="flex min-h-screen flex-col bg-white text-black md:flex-row">
+      <MobileAppHeader title={adminMode ? "Admin" : "Sign in"} subtitle="Continue to Carlink" backHref="/" />
       <section className="hidden flex-1 bg-black p-8 text-white lg:flex lg:flex-col lg:justify-between">
         <Link href="/" className="text-2xl font-bold">
           Carlink
@@ -45,12 +46,12 @@ export default async function SignInPage({ searchParams }: SignInPageProps) {
           </h1>
         </div>
       </section>
-      <section className="flex min-h-screen flex-1 items-start justify-center px-4 pb-[calc(7.5rem+env(safe-area-inset-bottom))] pt-6 sm:px-6 md:items-center md:py-10 md:pb-10">
+      <section className="flex flex-1 items-start justify-center px-4 pb-[calc(5rem+env(safe-area-inset-bottom))] pt-2 sm:px-6 md:min-h-screen md:items-center md:py-10 md:pb-10">
         <div className="w-full max-w-md">
-          <Link href="/" className="inline-flex rounded-full bg-[#efefef] px-4 py-2 text-sm font-medium lg:hidden">
+          <Link href="/" className="hidden rounded-full bg-[#efefef] px-4 py-2 text-sm font-medium lg:hidden">
             Back to explore
           </Link>
-          <form action={signInAction} className="mt-5 rounded-[1.75rem] bg-white p-4 shadow-[0_16px_45px_rgba(0,0,0,0.06)] ring-1 ring-black/5 sm:p-6 md:rounded-2xl md:bg-[#efefef] md:shadow-none md:ring-0">
+          <form action={signInAction} className="mt-5 rounded-[1.5rem] bg-white p-4 ring-1 ring-black/10 sm:p-6 md:rounded-2xl md:bg-[#efefef] md:ring-0">
             <input type="hidden" name="next" value={nextPath} />
             <h1 className="text-3xl font-bold">{adminMode ? "Admin sign in" : "Sign in to continue"}</h1>
             {errorMessage ? (

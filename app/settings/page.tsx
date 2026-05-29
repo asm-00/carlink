@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { signOutAction } from "@/app/actions/auth";
-import { updateProfileSettingsAction } from "@/app/actions/settings";
-import { Footer, MobileTabBar, TopNav } from "@/app/components/navigation";
+import { updateProfileSettingsAction, updateTripPreferencesAction } from "@/app/actions/settings";
+import { Footer, MobileAppHeader, MobileTabBar, TopNav } from "@/app/components/navigation";
 import { api, getConvexClient } from "@/app/lib/convex-server";
 import { requireSignedIn } from "@/app/lib/session";
 
@@ -63,13 +63,58 @@ function formatDate(value: number) {
   }).format(new Date(value));
 }
 
+function savedMessage(saved?: string) {
+  if (saved === "preferences") {
+    return "Trip preferences saved.";
+  }
+
+  if (saved === "profile") {
+    return "Profile saved.";
+  }
+
+  return "Settings saved.";
+}
+
+function errorMessage(error?: string) {
+  if (error === "preferences") {
+    return "Check the trip preference values.";
+  }
+
+  return "Enter your full name.";
+}
+
+function exploreHref(settings: {
+  defaultPickupArea: string;
+  preferredVehicleType: string;
+  gravelReadyOnly: boolean;
+}) {
+  const params = new URLSearchParams();
+
+  if (settings.defaultPickupArea !== "Any area") {
+    params.set("location", settings.defaultPickupArea);
+  }
+
+  if (settings.preferredVehicleType !== "Any car") {
+    params.set("vehicleType", settings.preferredVehicleType);
+  }
+
+  if (settings.gravelReadyOnly) {
+    params.set("gravelReady", "true");
+  }
+
+  return params.size ? `/?${params.toString()}` : "/";
+}
+
 export default async function SettingsPage({ searchParams }: SettingsPageProps) {
   const { saved, error } = await searchParams;
-  const { sessionToken, user } = await requireSignedIn("/settings");
-  const application = await getConvexClient().query(api.ownerApplications.mine, { sessionToken });
+  const { sessionToken } = await requireSignedIn("/settings");
+  const overview = await getConvexClient().query(api.settings.overview, { sessionToken });
+  const { user, settings, summary } = overview;
+  const application = overview.ownerApplication;
   const tools = accountTools(user.role);
   const ownerStatus = ownerStatusDetails(user.ownerStatus);
   const phone = user.phone ?? application?.phone ?? "";
+  const preferenceHref = exploreHref(settings);
   const accessLinks = [
     { href: "/trips", label: "Trips", detail: "Bookings and payments" },
     user.role === "owner" || user.role === "admin"
@@ -79,11 +124,12 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
   ].filter((link): link is { href: string; label: string; detail: string } => Boolean(link));
 
   return (
-    <div className="min-h-screen bg-[#f7f7f5] text-black md:bg-white">
+    <div className="min-h-screen bg-white text-black">
       <TopNav />
-      <main className="pb-[calc(7.5rem+env(safe-area-inset-bottom))] md:pb-0">
-        <section className="mx-auto max-w-7xl px-4 py-5 sm:px-6 md:py-12 lg:px-8">
-          <div className="flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
+      <MobileAppHeader title="Account" subtitle={user.email} />
+      <main className="pb-[calc(5rem+env(safe-area-inset-bottom))] md:pb-0">
+        <section className="mx-auto max-w-7xl px-4 py-2 sm:px-6 md:py-12 lg:px-8">
+          <div className="hidden flex-col gap-5 md:flex md:flex-row md:items-end md:justify-between">
             <div>
               <p className="text-sm font-medium text-[#5e5e5e]">Account</p>
               <h1 className="mt-2 text-4xl font-bold leading-tight md:text-5xl">Settings</h1>
@@ -101,12 +147,12 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
 
           {saved ? (
             <div className="mt-6 rounded-2xl bg-black p-4 text-sm font-medium text-white">
-              Settings saved.
+              {savedMessage(saved)}
             </div>
           ) : null}
           {error ? (
             <div className="mt-6 rounded-2xl bg-[#efefef] p-4 text-sm font-medium">
-              Enter your full name.
+              {errorMessage(error)}
             </div>
           ) : null}
         </section>
@@ -125,6 +171,10 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
                 <div className="flex items-center justify-between gap-4 rounded-2xl bg-white/10 p-4">
                   <span className="text-[#d6d6d6]">Verified</span>
                   <span className="font-medium">{user.isVerified ? "Yes" : "No"}</span>
+                </div>
+                <div className="flex items-center justify-between gap-4 rounded-2xl bg-white/10 p-4">
+                  <span className="text-[#d6d6d6]">Joined</span>
+                  <span className="font-medium">{formatDate(user.createdAt)}</span>
                 </div>
               </div>
             </div>
@@ -186,15 +236,87 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
               </button>
             </form>
 
+            <form action={updateTripPreferencesAction} className="rounded-[1.75rem] bg-white p-4 ring-1 ring-black/10 md:rounded-2xl md:p-5">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <h2 className="text-2xl font-bold">Trip preferences</h2>
+                  <p className="mt-2 text-sm text-[#5e5e5e]">Default search and trip length.</p>
+                </div>
+                <Link
+                  href={preferenceHref}
+                  className="inline-flex min-h-11 items-center justify-center rounded-full bg-[#efefef] px-5 text-sm font-medium transition hover:bg-[#e2e2e2]"
+                >
+                  Search with defaults
+                </Link>
+              </div>
+              <div className="mt-5 grid gap-3 sm:grid-cols-2">
+                <label className="block rounded-lg bg-[#efefef] p-4">
+                  <span className="text-xs font-medium text-[#5e5e5e]">Pickup area</span>
+                  <select
+                    name="defaultPickupArea"
+                    defaultValue={settings.defaultPickupArea}
+                    className="mt-1 w-full appearance-none bg-transparent text-base font-medium outline-none"
+                  >
+                    <option>Any area</option>
+                    <option>Windhoek</option>
+                    <option>Swakopmund</option>
+                  </select>
+                </label>
+                <label className="block rounded-lg bg-[#efefef] p-4">
+                  <span className="text-xs font-medium text-[#5e5e5e]">Car type</span>
+                  <select
+                    name="preferredVehicleType"
+                    defaultValue={settings.preferredVehicleType}
+                    className="mt-1 w-full appearance-none bg-transparent text-base font-medium outline-none"
+                  >
+                    <option>Any car</option>
+                    <option>Compact</option>
+                    <option>SUV</option>
+                    <option>4x4</option>
+                  </select>
+                </label>
+                <label className="block rounded-lg bg-[#efefef] p-4">
+                  <span className="text-xs font-medium text-[#5e5e5e]">Default trip length</span>
+                  <input
+                    name="defaultTripDays"
+                    type="number"
+                    min="1"
+                    max="30"
+                    required
+                    defaultValue={settings.defaultTripDays}
+                    className="mt-1 w-full bg-transparent text-base font-medium outline-none"
+                  />
+                </label>
+                <label className="flex min-h-20 items-center justify-between gap-4 rounded-lg bg-[#efefef] p-4 text-sm font-medium">
+                  Gravel-ready cars first
+                  <input
+                    name="gravelReadyOnly"
+                    type="checkbox"
+                    defaultChecked={settings.gravelReadyOnly}
+                    className="h-5 w-5"
+                  />
+                </label>
+              </div>
+              <button
+                type="submit"
+                className="mt-4 min-h-12 w-full rounded-full bg-black px-5 text-base font-medium text-white transition hover:bg-[#282828]"
+              >
+                Save trip preferences
+              </button>
+            </form>
+
             <div className="grid gap-4 md:grid-cols-3">
               {[
-                { label: "Joined", value: formatDate(user.createdAt) },
-                { label: "Profile", value: user.isVerified ? "Verified" : "Not verified" },
-                { label: "Rental application", value: ownerStatus.label },
+                { label: "Bookings", value: summary.totalBookings, detail: "Latest account records" },
+                { label: "Needs action", value: summary.needsActionBookings, detail: "Requests or payments" },
+                user.role === "owner" || user.role === "admin"
+                  ? { label: "Listings", value: summary.totalListings, detail: `${summary.publishedListings} published` }
+                  : { label: "Completed", value: summary.completedTrips, detail: "Closed trips" },
               ].map((item) => (
                 <div key={item.label} className="rounded-2xl bg-white p-5 ring-1 ring-black/10">
                   <div className="text-sm font-medium text-[#5e5e5e]">{item.label}</div>
                   <div className="mt-4 text-xl font-bold">{item.value}</div>
+                  <div className="mt-1 text-sm text-[#5e5e5e]">{item.detail}</div>
                 </div>
               ))}
             </div>

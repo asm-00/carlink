@@ -19,6 +19,25 @@ export async function approveOwnerAction(formData: FormData) {
   });
 
   revalidatePath("/admin");
+  revalidatePath("/owner");
+  revalidatePath("/settings");
+}
+
+export async function rejectOwnerAction(formData: FormData) {
+  const sessionToken = await getSessionToken();
+
+  if (!sessionToken) {
+    redirect("/sign-in?next=/admin&mode=admin");
+  }
+
+  await getConvexClient().mutation(api.admin.rejectOwner, {
+    sessionToken,
+    applicationId: String(formData.get("applicationId")) as Id<"ownerApplications">,
+  });
+
+  revalidatePath("/admin");
+  revalidatePath("/owner");
+  revalidatePath("/settings");
 }
 
 export async function approveVehicleAction(formData: FormData) {
@@ -35,4 +54,22 @@ export async function approveVehicleAction(formData: FormData) {
 
   revalidatePath("/admin");
   revalidatePath("/");
+  revalidatePath("/owner/dashboard");
+}
+
+export async function returnVehicleForChangesAction(formData: FormData) {
+  const sessionToken = await getSessionToken();
+
+  if (!sessionToken) {
+    redirect("/sign-in?next=/admin&mode=admin");
+  }
+
+  await getConvexClient().mutation(api.vehicles.returnListingForChanges, {
+    sessionToken,
+    vehicleId: String(formData.get("vehicleId")) as Id<"vehicles">,
+  });
+
+  revalidatePath("/admin");
+  revalidatePath("/");
+  revalidatePath("/owner/dashboard");
 }

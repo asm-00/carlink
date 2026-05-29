@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { submitOwnerApplicationAction } from "@/app/actions/owner";
-import { Footer, MobileTabBar, TopNav } from "@/app/components/navigation";
+import { Footer, MobileAppHeader, MobileTabBar, TopNav } from "@/app/components/navigation";
 import { api, getConvexClient } from "@/app/lib/convex-server";
 import { getCurrentUser, getSessionToken } from "@/app/lib/session";
 
@@ -30,16 +30,19 @@ export default async function OwnerPage({ searchParams }: OwnerPageProps) {
       : null;
 
   return (
-    <div className="min-h-screen bg-[#f7f7f5] text-black md:bg-white">
+    <div className="min-h-screen bg-white text-black">
       <TopNav />
-      <main className="pb-[calc(7.5rem+env(safe-area-inset-bottom))] md:pb-0">
+      <MobileAppHeader title="List your car" subtitle="Owner application" />
+      <main className="pb-[calc(5rem+env(safe-area-inset-bottom))] md:pb-0">
         <section className="mx-auto grid max-w-7xl gap-5 px-4 py-5 sm:px-6 md:grid-cols-[0.9fr_1.1fr] md:gap-8 md:py-14 lg:px-8">
           <div className="space-y-4 md:space-y-6">
-            <p className="text-sm font-medium text-[#5e5e5e]">Owner application</p>
-            <h1 className="text-4xl font-bold leading-[1.06] sm:text-6xl">Apply to list a vehicle.</h1>
-            <p className="max-w-lg text-base leading-6 text-[#5e5e5e] md:text-lg md:leading-7">
-              Tell us about your vehicle and we will review the listing setup.
-            </p>
+            <div className="hidden md:block">
+              <p className="text-sm font-medium text-[#5e5e5e]">Owner application</p>
+              <h1 className="mt-4 text-4xl font-bold leading-[1.06] sm:text-6xl">Apply to list a vehicle.</h1>
+              <p className="mt-4 max-w-lg text-base leading-6 text-[#5e5e5e] md:text-lg md:leading-7">
+                Tell us about your vehicle and we will review the listing setup.
+              </p>
+            </div>
             {user && (user.role === "owner" || user.role === "admin") ? (
               <Link
                 href="/owner/dashboard"
